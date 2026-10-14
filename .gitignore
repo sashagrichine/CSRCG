@@ -8,3 +8,4 @@ venv/
 .claude/settings.local.json
 *.pdf
 ~$*.xlsx
+!docs/*.pdf
