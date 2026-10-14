@@ -997,7 +997,7 @@ if st.button(
 
     try:
         opener = opener_template.format(
-            name=skater_name.strip()
+            name=skater_name.split()[0]
         )
     except (KeyError, ValueError) as error:
         st.error(f"Invalid opening template: {error}")
