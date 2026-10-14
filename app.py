@@ -1,4 +1,5 @@
 
+import base64
 import random
 import re
 from datetime import date
@@ -11,7 +12,7 @@ import streamlit as st
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.utils import simpleSplit
+from reportlab.lib.utils import ImageReader, simpleSplit
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -281,6 +282,10 @@ def make_first_improvement_encouraging(sentence):
     return sentence + "."
 
 
+def format_date(value):
+    return f"{value.strftime('%B')} {value.day}, {value.year}"
+
+
 # --------------------------------------------------
 # PDF FONT SETUP
 # --------------------------------------------------
@@ -311,6 +316,31 @@ def register_pdf_font():
     return "Helvetica"
 
 
+def register_signature_font():
+    """
+    Try to use a handwriting-style font for typed signatures.
+    Falls back to italic Times if none is installed.
+    """
+
+    font_paths = [
+        "/System/Library/Fonts/Supplemental/Brush Script.ttf",
+        "/System/Library/Fonts/Supplemental/Apple Chancery.ttf",
+        "/System/Library/Fonts/Supplemental/Bradley Hand Bold.ttf"
+    ]
+
+    for font_path in font_paths:
+        if Path(font_path).exists():
+            try:
+                pdfmetrics.registerFont(
+                    TTFont("SignatureFont", font_path)
+                )
+                return "SignatureFont"
+            except Exception:
+                continue
+
+    return "Times-Italic"
+
+
 # --------------------------------------------------
 # CREATE ONE-PAGE PDF
 # --------------------------------------------------
@@ -320,7 +350,10 @@ def create_pdf(
     coach_name,
     season,
     passed_skills,
-    comments
+    comments,
+    signed_date,
+    signature_text,
+    signature_bytes
 ):
     buffer = BytesIO()
 
@@ -535,6 +568,52 @@ def create_pdf(
     pdf.line(left, 55, 255, 55)
     pdf.line(335, 55, right, 55)
 
+    # Date signed, written just above the date line
+    pdf.setFillColor(dark)
+    pdf.setFont(font_name, 11)
+    pdf.drawString(
+        left + 4,
+        61,
+        format_date(signed_date)
+    )
+
+    # Typed signature, written in a script font on the signature line
+    if signature_text:
+        script_font = register_signature_font()
+
+        signature_size = 26
+
+        while (
+            signature_size > 10
+            and pdfmetrics.stringWidth(
+                signature_text, script_font, signature_size
+            ) > right - 335 - 8
+        ):
+            signature_size -= 1
+
+        pdf.setFillColor(blue)
+        pdf.setFont(script_font, signature_size)
+        pdf.drawString(339, 61, signature_text)
+
+    # Drawn signature image, sitting on the signature line
+    elif signature_bytes:
+        try:
+            pdf.drawImage(
+                ImageReader(BytesIO(signature_bytes)),
+                335,
+                58,
+                width=right - 335,
+                height=36,
+                preserveAspectRatio=True,
+                anchor="sw",
+                mask="auto"
+            )
+        except Exception:
+            raise ValueError(
+                "The drawn signature could not be read. "
+                "Please clear it and draw it again."
+            )
+
     pdf.setFillColor(muted)
     pdf.setFont(font_name, 9)
 
@@ -565,9 +644,48 @@ def create_pdf(
 
 st.subheader("Skater Information")
 
-skater_name = st.text_input("Skater name")
+def format_name(raw_name):
+    """
+    Tidy a typed name: single spaces, and a capital letter at the
+    start of every word and after hyphens or apostrophes.
+    Other letters are left as typed, so "McDonald" stays "McDonald".
+    """
 
-coach_name = st.text_input("Coach name")
+    return re.sub(
+        r"(^|[\s\-'’])([^\W\d_])",
+        lambda match: match.group(1) + match.group(2).upper(),
+        " ".join(raw_name.split())
+    )
+
+
+def is_full_name(name):
+    # First and last name: at least two words.
+    return len(name.split()) >= 2
+
+
+def tidy_name_field(key):
+    st.session_state[key] = format_name(st.session_state[key])
+
+
+skater_name = st.text_input(
+    "Skater name (first and last)",
+    key="skater_name_input",
+    on_change=tidy_name_field,
+    args=("skater_name_input",)
+)
+
+if skater_name.strip() and not is_full_name(skater_name):
+    st.warning("Please enter the skater's first and last name.")
+
+coach_name = st.text_input(
+    "Coach name (first and last)",
+    key="coach_name_input",
+    on_change=tidy_name_field,
+    args=("coach_name_input",)
+)
+
+if coach_name.strip() and not is_full_name(coach_name):
+    st.warning("Please enter the coach's first and last name.")
 
 season = st.text_input(
     "Season / Date",
@@ -577,6 +695,172 @@ season = st.text_input(
         "You can change it to an exact date."
     )
 )
+
+
+# --------------------------------------------------
+# SIGNATURE PAD (draw with mouse or finger)
+# --------------------------------------------------
+
+SIGNATURE_PAD_HTML = """
+<div class="wrap">
+  <canvas class="pad"></canvas>
+  <div class="row">
+    <span class="hint">Sign above the line</span>
+    <button type="button" class="clear">Clear</button>
+  </div>
+</div>
+"""
+
+SIGNATURE_PAD_CSS = """
+.wrap { font-family: inherit; }
+.pad {
+    display: block;
+    width: 100%;
+    height: 160px;
+    border: 1px solid #d9dfe8;
+    border-radius: 8px;
+    background: #ffffff;
+    touch-action: none;
+    cursor: crosshair;
+}
+.row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    font-size: 13px;
+    color: #657084;
+}
+.clear {
+    border: 1px solid #d9dfe8;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 4px 12px;
+    cursor: pointer;
+}
+"""
+
+SIGNATURE_PAD_JS = """
+export default function(component) {
+    const { parentElement, setStateValue } = component;
+    const canvas = parentElement.querySelector('.pad');
+
+    // Streamlit may call this again on reruns; set up only once.
+    if (canvas.dataset.ready) {
+        return;
+    }
+    canvas.dataset.ready = '1';
+
+    const ratio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * ratio);
+    canvas.height = Math.round(rect.height * ratio);
+
+    const ctx = canvas.getContext('2d');
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1a2380';
+
+    let drawing = false;
+    let hasInk = false;
+
+    const point = (event) => {
+        const box = canvas.getBoundingClientRect();
+        return [event.clientX - box.left, event.clientY - box.top];
+    };
+
+    canvas.addEventListener('pointerdown', (event) => {
+        drawing = true;
+        canvas.setPointerCapture(event.pointerId);
+        const [x, y] = point(event);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 0.01, y + 0.01);
+        ctx.stroke();
+        hasInk = true;
+    });
+
+    canvas.addEventListener('pointermove', (event) => {
+        if (!drawing) {
+            return;
+        }
+        const [x, y] = point(event);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    });
+
+    const finish = () => {
+        if (!drawing) {
+            return;
+        }
+        drawing = false;
+        setStateValue('image', hasInk ? canvas.toDataURL('image/png') : '');
+    };
+
+    canvas.addEventListener('pointerup', finish);
+    canvas.addEventListener('pointercancel', finish);
+
+    parentElement.querySelector('.clear').addEventListener('click', () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        hasInk = false;
+        setStateValue('image', '');
+    });
+}
+"""
+
+signature_pad = st.components.v2.component(
+    "signature_pad",
+    html=SIGNATURE_PAD_HTML,
+    css=SIGNATURE_PAD_CSS,
+    js=SIGNATURE_PAD_JS
+)
+
+
+# --------------------------------------------------
+# DATE AND SIGNATURE
+# --------------------------------------------------
+
+st.subheader("Date and Signature")
+
+signed_date = st.date_input(
+    "Date signed",
+    value=date.today()
+)
+
+signature_method = st.radio(
+    "Coach signature",
+    ["Type it", "Draw it", "Sign by hand"],
+    horizontal=True,
+    help=(
+        "Type your name in a handwriting font, draw it with your "
+        "mouse or finger, or leave the line blank to sign the "
+        "printed page."
+    )
+)
+
+signature_text = ""
+signature_bytes = None
+
+if signature_method == "Type it":
+    signature_text = st.text_input(
+        "Type your signature",
+        placeholder="e.g. Jane Smith"
+    ).strip()
+
+elif signature_method == "Draw it":
+    st.caption("Draw your signature in the box below.")
+
+    pad = signature_pad(
+        key="signature_pad",
+        on_image_change=lambda: None
+    )
+
+    if pad.image:
+        signature_bytes = base64.b64decode(
+            pad.image.split(",", 1)[1]
+        )
 
 
 # --------------------------------------------------
@@ -650,12 +934,12 @@ if st.button(
     type="primary"
 ):
 
-    if not skater_name.strip():
-        st.error("Please enter a skater's name.")
+    if not is_full_name(skater_name):
+        st.error("Please enter the skater's first and last name.")
         st.stop()
 
-    if not coach_name.strip():
-        st.error("Please enter a coach's name.")
+    if not is_full_name(coach_name):
+        st.error("Please enter the coach's first and last name.")
         st.stop()
 
     if not season.strip():
@@ -755,9 +1039,10 @@ if st.session_state.report_ready:
     if not edited_report.strip():
         st.info("Enter comments to prepare the PDF.")
 
-    elif not skater_name.strip() or not coach_name.strip():
+    elif not is_full_name(skater_name) or not is_full_name(coach_name):
         st.info(
-            "Enter the skater and coach names to prepare the PDF."
+            "Enter the first and last name of the skater and "
+            "coach to prepare the PDF."
         )
 
     elif not season.strip():
@@ -770,7 +1055,10 @@ if st.session_state.report_ready:
                 coach_name=coach_name.strip(),
                 season=season.strip(),
                 passed_skills=passed_skills,
-                comments=edited_report
+                comments=edited_report,
+                signed_date=signed_date,
+                signature_text=signature_text,
+                signature_bytes=signature_bytes
             )
 
             safe_name = re.sub(
@@ -791,7 +1079,7 @@ if st.session_state.report_ready:
 
             st.caption(
                 "The PDF includes your current checklist, "
-                "edited comments, season and signature line."
+                "edited comments, season, date and signature."
             )
 
         except ValueError as error:
