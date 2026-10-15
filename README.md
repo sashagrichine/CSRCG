@@ -22,7 +22,7 @@ The sample above uses fictional names. The PDF is also in [docs/sample-report.pd
 
 ## How it works
 
-1. `app.py` loads `report_card_database.xlsx` with pandas and checks that the required sheets and columns exist.
+1. `home.py` (the report generator page) loads `report_card_database.xlsx` with pandas and checks that the required sheets and columns exist.
 2. The coach fills in the form, ticks passed skills, and chooses strength and improvement skills.
 3. **Generate Comments** picks a random opener, one random positive phrase per strength, one random improvement instruction per improvement area, and a random closer, and joins them into paragraphs.
 4. The coach edits the text, then downloads the PDF, which is drawn with ReportLab.
@@ -56,7 +56,8 @@ Each skill needs at least one row in both phrase sheets. Other columns in the wo
 ## Project structure
 
 ```
-app.py                       Streamlit UI, comment generation and PDF creation
+app.py                       Entry point: sets up navigation between pages
+home.py                      Report generator UI, comment generation and PDF creation
 report_card_database.xlsx    Skills and phrase content
 requirements.txt             Python dependencies
 .streamlit/config.toml       Theme colour
@@ -64,7 +65,7 @@ pages/About.py               About page (project description), linked from the m
 docs/                        Sample report (PDF and PNG) used in this README
 ```
 
-`app.py` is intentionally a single script.
+The report generator is intentionally a single script (`home.py`); `app.py` only wires up the pages.
 
 ## Tech stack
 
