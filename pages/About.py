@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.page_link(
-    "app.py",
+    "pages/Home.py",
     label="Back to the report generator",
     icon="⛸️"
 )

@@ -1,6 +1,6 @@
 # SkatingReportCards
 
-Streamlit app that builds Pre-CanSkate progress report PDFs. Entry point `app.py` (navigation); the app itself is `home.py`; `pages/About.py` is the About page.
+Streamlit app that builds Pre-CanSkate progress report PDFs. Entry point `app.py` (navigation); the app itself is `pages/Home.py`; `pages/About.py` is the About page.
 
 ## Commands
 - Setup: `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
@@ -12,13 +12,13 @@ Streamlit app that builds Pre-CanSkate progress report PDFs. Entry point `app.py
   - Positive Phrases: `Skill ID`, `Report Detail`
   - Improvement Phrases: `Skill ID`, `Report Instruction`
   - Open and Close Phrases: `Type` (Opener/Closer), `Template` (openers use `{name}`)
-- `app.py` is the entry point and only sets up `st.navigation` (pages: `home.py`, `pages/About.py`). `home.py` flow: load Excel -> form inputs -> "Generate Comments" assembles
+- `app.py` is the entry point and only sets up `st.navigation` (pages: `pages/Home.py`, `pages/About.py`). `pages/Home.py` flow: load Excel -> form inputs -> "Generate Comments" assembles
   opener / strengths / improvements / closer -> editable text area -> `create_pdf` (ReportLab, US Letter).
 - Skill ID is the join key between sheets. Header cells and values in the Excel
   can have trailing spaces; code strips them.
 
 ## Conventions
-- Keep the generator a simple single-file script (`home.py`) unless asked to split it.
+- Keep the generator a simple single-file script (`pages/Home.py`) unless asked to split it.
 - Match the existing style: sectioned with `# ----` banners, verbose spacing, no type hints.
 - PDF must stay one page; comments shrink 10pt -> 7pt, then raise a ValueError.
 - Wording changes belong in the Excel, not in code.

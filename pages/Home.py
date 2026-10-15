@@ -30,7 +30,7 @@ st.set_page_config(
 )
 
 EXCEL_FILE = (
-    Path(__file__).resolve().parent
+    Path(__file__).resolve().parent.parent
     / "report_card_database.xlsx"
 )
 

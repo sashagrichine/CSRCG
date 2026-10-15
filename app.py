@@ -10,7 +10,7 @@ import streamlit as st
 
 pages = [
     st.Page(
-        "home.py",
+        "pages/Home.py",
         title="Report Generator",
         icon="⛸️",
         default=True
