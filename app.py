@@ -36,6 +36,7 @@ EXCEL_FILE = (
 
 st.title("Pre-CanSkate Progress Report Generator")
 st.caption("Create personalized skating progress reports.")
+st.page_link("pages/About.py", label="About this project", icon="ℹ️")
 
 
 # --------------------------------------------------

@@ -60,6 +60,7 @@ app.py                       Streamlit UI, comment generation and PDF creation
 report_card_database.xlsx    Skills and phrase content
 requirements.txt             Python dependencies
 .streamlit/config.toml       Theme colour
+pages/About.py               About page (project description), linked from the main page
 docs/                        Sample report (PDF and PNG) used in this README
 ```
 
